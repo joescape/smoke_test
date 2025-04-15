@@ -15,13 +15,22 @@ set LOG_FILE="$LOG_DIR/setup_${TIMESTAMP}.log"
 && echo "Logging all output to: $LOG_FILE" \
 && echo "============================================") |& tee -a "$LOG_FILE"
 
-# Initialize pyenv environment variables
-setenv PYENV_ROOT "$HOME/.pyenv"
-set path = ($PYENV_ROOT/bin $path)
-eval `$PYENV_ROOT/bin/pyenv init -` >& /dev/null
+# Initialize pyenv environment variables if pyenv exists
+if (-d "$HOME/.pyenv") then
+    setenv PYENV_ROOT "$HOME/.pyenv"
+    set path = ($PYENV_ROOT/bin $path)
+    eval `$PYENV_ROOT/bin/pyenv init -` >& /dev/null
+endif
 
-# Function to check build dependencies
-check_build_dependencies:
+start:
+    # Create a temporary directory for the test
+    set TEST_DIR="$HOME/smoke_test_`date +%Y%m%d_%H%M%S`"
+    mkdir -p "$TEST_DIR"
+    cd "$TEST_DIR"
+    echo "Test directory: $TEST_DIR" |& tee -a "$LOG_FILE"
+    goto check_deps
+
+check_deps:
     echo "=== Checking Build Dependencies ===" |& tee -a "$LOG_FILE"
     
     # Check for basic tools in PATH
@@ -47,8 +56,8 @@ check_build_dependencies:
     endif
     
     echo "✅ All build requirements met" |& tee -a "$LOG_FILE"
+    goto install_pyenv
 
-# Install pyenv
 install_pyenv:
     echo "=== Installing pyenv ===" |& tee -a "$LOG_FILE"
     set pyenv_dir="$HOME/.pyenv"
@@ -77,9 +86,9 @@ install_pyenv:
             exit 1
         endif
     endif
+    goto install_python
 
-# Install Python 3.11
-install_python_311:
+install_python:
     echo "=== Installing Python 3.11 ===" |& tee -a "$LOG_FILE"
     set python_version="3.11.8"
     
@@ -119,9 +128,9 @@ install_python_311:
         echo "❌ Failed to set Python $python_version as local version" |& tee -a "$LOG_FILE"
         exit 1
     endif
+    goto setup_venv
 
-# Set up Python environment
-setup_python_environment:
+setup_venv:
     echo "=== Setting up Python Environment ===" |& tee -a "$LOG_FILE"
     
     # Create and activate virtual environment
@@ -143,40 +152,27 @@ setup_python_environment:
     
     if ($status == 0) then
         echo "✅ Python environment setup complete" |& tee -a "$LOG_FILE"
+        goto finish
     else
         echo "❌ Failed to set up Python environment" |& tee -a "$LOG_FILE"
         exit 1
     endif
 
-# Main script execution
-echo "=== Setting up smoke test environment ===" |& tee -a "$LOG_FILE"
-
-# Create a temporary directory for the test
-set TEST_DIR="$HOME/smoke_test_`date +%Y%m%d_%H%M%S`"
-mkdir -p "$TEST_DIR"
-cd "$TEST_DIR"
-
-echo "Test directory: $TEST_DIR" |& tee -a "$LOG_FILE"
-
-# Run the setup steps
-check_build_dependencies
-install_pyenv
-install_python_311
-setup_python_environment
-
-# Display final status
-echo "" |& tee -a "$LOG_FILE"
-echo "=== Setup Complete ===" |& tee -a "$LOG_FILE"
-echo "All logs are in: $LOG_DIR/" |& tee -a "$LOG_FILE"
-echo "Setup log: $LOG_FILE" |& tee -a "$LOG_FILE"
-echo "" |& tee -a "$LOG_FILE"
-echo "To view the logs:" |& tee -a "$LOG_FILE"
-echo "ls -ltr $LOG_DIR/" |& tee -a "$LOG_FILE"
-echo "" |& tee -a "$LOG_FILE"
-echo "To view the setup log:" |& tee -a "$LOG_FILE"
-echo "cat $LOG_FILE" |& tee -a "$LOG_FILE"
-echo "" |& tee -a "$LOG_FILE"
-echo "To clean up logs:" |& tee -a "$LOG_FILE"
-echo "rm -rf $LOG_DIR  # This will remove all logs" |& tee -a "$LOG_FILE"
-echo "" |& tee -a "$LOG_FILE"
-echo "=== Smoke Test Setup Completed at `date` ===" |& tee -a "$LOG_FILE" 
+finish:
+    # Display final status
+    echo "" |& tee -a "$LOG_FILE"
+    echo "=== Setup Complete ===" |& tee -a "$LOG_FILE"
+    echo "All logs are in: $LOG_DIR/" |& tee -a "$LOG_FILE"
+    echo "Setup log: $LOG_FILE" |& tee -a "$LOG_FILE"
+    echo "" |& tee -a "$LOG_FILE"
+    echo "To view the logs:" |& tee -a "$LOG_FILE"
+    echo "ls -ltr $LOG_DIR/" |& tee -a "$LOG_FILE"
+    echo "" |& tee -a "$LOG_FILE"
+    echo "To view the setup log:" |& tee -a "$LOG_FILE"
+    echo "cat $LOG_FILE" |& tee -a "$LOG_FILE"
+    echo "" |& tee -a "$LOG_FILE"
+    echo "To clean up logs:" |& tee -a "$LOG_FILE"
+    echo "rm -rf $LOG_DIR  # This will remove all logs" |& tee -a "$LOG_FILE"
+    echo "" |& tee -a "$LOG_FILE"
+    echo "=== Smoke Test Setup Completed at `date` ===" |& tee -a "$LOG_FILE"
+    exit 0 
