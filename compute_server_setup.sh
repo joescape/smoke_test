@@ -49,7 +49,9 @@ detect_shell() {
         echo "bash"
     elif [ -n "$ZSH_VERSION" ]; then
         echo "zsh"
-    elif [ -n "$version" ]; then  # tcsh sets this variable
+    elif [ -n "$tcsh" ]; then  # tcsh specific variable
+        echo "tcsh"
+    elif [ -n "$version" ]; then  # csh sets this variable
         echo "csh"
     else
         echo "unknown"
@@ -73,6 +75,12 @@ configure_pyenv() {
             echo 'export PYENV_ROOT="$HOME/.pyenv"' >> "$config_file"
             echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> "$config_file"
             echo 'eval "$(pyenv init -)"' >> "$config_file"
+            ;;
+        "tcsh")
+            config_file="$HOME/.tcshrc"
+            echo 'setenv PYENV_ROOT "$HOME/.pyenv"' >> "$config_file"
+            echo 'set path = ($HOME/.pyenv/bin $path)' >> "$config_file"
+            echo 'eval `pyenv init -`' >> "$config_file"
             ;;
         "csh")
             config_file="$HOME/.cshrc"
@@ -124,6 +132,9 @@ install_pyenv() {
     case "$(detect_shell)" in
         "bash"|"zsh")
             source ~/.bashrc 2>/dev/null || source ~/.zshrc 2>/dev/null
+            ;;
+        "tcsh")
+            source ~/.tcshrc 2>/dev/null
             ;;
         "csh")
             source ~/.cshrc 2>/dev/null
