@@ -1,5 +1,21 @@
 #!/bin/bash
 
+# Set up logging for all terminal output
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="${SCRIPT_DIR}/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/setup_${TIMESTAMP}.log"
+
+# Redirect all output to both terminal and log file
+exec 1> >(tee -a "$LOG_FILE")
+exec 2> >(tee -a "$LOG_FILE" >&2)
+
+echo "=== Smoke Test Setup Started at $(date) ==="
+echo "Current directory: $SCRIPT_DIR"
+echo "Logging all output to: $LOG_FILE"
+echo "============================================"
+
 # Function to check build dependencies
 check_build_dependencies() {
     echo "=== Checking Build Dependencies ==="
@@ -404,10 +420,16 @@ python smoke_test.py
 # Display final status
 echo ""
 echo "=== Setup Complete ==="
-echo "Logs directory: $TEST_DIR/logs/"
+echo "All logs are in: $LOG_DIR/"
+echo "Setup log: $LOG_FILE"
 echo ""
-echo "To view the latest log file:"
-echo "ls -ltr $TEST_DIR/logs/"
+echo "To view the logs:"
+echo "ls -ltr $LOG_DIR/"
 echo ""
-echo "To clean up when done, run:"
-echo "cd .. && rm -rf $(basename $TEST_DIR)" 
+echo "To view the setup log:"
+echo "cat $LOG_FILE"
+echo ""
+echo "To clean up logs:"
+echo "rm -rf $LOG_DIR  # This will remove all logs"
+echo ""
+echo "=== Smoke Test Setup Completed at $(date) ===" 
