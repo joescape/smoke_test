@@ -215,13 +215,23 @@ setup_python_environment() {
     python -m venv venv
     source venv/bin/activate
     
-    # Upgrade pip
+    # Upgrade pip to latest version
     echo "Upgrading pip..."
-    pip install --upgrade pip
+    python -m pip install --upgrade pip
     
-    # Install dependencies
+    # Install build dependencies first
+    echo "Installing build dependencies..."
+    pip install wheel setuptools
+    
+    # Install dependencies with retry logic
     echo "Installing project dependencies..."
-    pip install -r requirements.txt
+    for attempt in {1..3}; do
+        if pip install -r requirements.txt; then
+            break
+        fi
+        echo "Attempt $attempt failed, retrying..."
+        sleep 5
+    done
     
     # Verify installations
     echo "Verifying installations..."
