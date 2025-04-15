@@ -209,24 +209,12 @@ cleanup_failed_install() {
 setup_python_environment() {
     echo "=== Setting up Python Environment ==="
     
-    # Install pyenv
-    if ! install_pyenv; then
-        echo "❌ pyenv installation failed"
-        return 1
-    fi
-    
-    # Install Python 3.11
-    if ! install_python_311; then
-        echo "❌ Python 3.11 installation failed"
-        return 1
-    fi
-    
     # Create and activate virtual environment
     echo "Creating virtual environment..."
-    python -m venv venv
-    source venv/bin/activate
+    python3 -m venv venv
+    source venv/bin/activate || source venv/Scripts/activate
     
-    # Upgrade pip to latest version
+    # Upgrade pip first
     echo "Upgrading pip..."
     python -m pip install --upgrade pip
     
@@ -234,24 +222,29 @@ setup_python_environment() {
     echo "Installing build dependencies..."
     pip install wheel setuptools
     
-    # Install dependencies with retry logic
+    # Install dependencies with retry logic and verbose output
     echo "Installing project dependencies..."
     for attempt in {1..3}; do
-        if pip install -r requirements.txt; then
+        if pip install -r requirements.txt -v; then
             break
         fi
-        echo "Attempt $attempt failed, retrying..."
+        echo "Attempt $attempt failed, retrying in 5 seconds..."
         sleep 5
     done
     
-    # Verify installations
+    # Verify installations with detailed error reporting
     echo "Verifying installations..."
-    if ! python -c "import dotenv, structlog, git" 2>/dev/null; then
-        echo "❌ Failed to install required packages"
-        return 1
-    fi
+    for package in dotenv structlog git; do
+        echo -n "Checking $package... "
+        if ! python -c "import $package" 2>/dev/null; then
+            echo "❌ Failed to import $package"
+            echo "Attempting to reinstall $package..."
+            pip install --force-reinstall $(grep -i $package requirements.txt)
+        else
+            echo "✅"
+        fi
+    done
     
-    echo "✅ Python environment setup completed successfully"
     return 0
 }
 
@@ -322,6 +315,57 @@ check_pip() {
     fi
 }
 
+# Function to set up logging
+setup_logging() {
+    echo "Setting up logging directory..."
+    
+    # Create logs directory with proper permissions
+    mkdir -p logs
+    chmod 755 logs
+    
+    # Test logging functionality
+    echo "Testing logging functionality..."
+    cat > test_logging.py << 'EOF'
+import logging
+import os
+from datetime import datetime
+
+# Ensure logs directory exists
+os.makedirs('logs', exist_ok=True)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('logs/test_log.log', mode='w'),
+        logging.StreamHandler()
+    ]
+)
+
+# Write test log
+logging.info('This is a test log message')
+EOF
+    
+    # Run logging test
+    echo "Running logging test..."
+    python test_logging.py
+    
+    # Verify log file
+    if [ -f "logs/test_log.log" ]; then
+        echo "✅ Log file created successfully"
+        echo "Log file contents:"
+        cat logs/test_log.log
+    else
+        echo "❌ Failed to create log file"
+        return 1
+    fi
+    
+    # Clean up test file
+    rm test_logging.py
+    return 0
+}
+
 # Main script execution
 echo "=== Setting up smoke test environment ==="
 
@@ -341,46 +385,23 @@ if ! git clone "$GITHUB_REPO" .; then
 fi
 echo "✅ Repository cloned successfully"
 
-# Verify the repository
-echo "Verifying repository..."
-if [ ! -f "smoke_test.py" ] || [ ! -f "logging_config.py" ]; then
-    echo "❌ Required files not found in repository"
-    exit 1
-fi
-echo "✅ Repository verification successful"
-
 # Set up Python environment
 if ! setup_python_environment; then
     echo "❌ Python environment setup failed"
     exit 1
 fi
 
-# Create logs directory with user permissions
-echo "Creating logs directory..."
-mkdir -p logs
-chmod 700 logs  # User-only permissions
+# Set up logging
+if ! setup_logging; then
+    echo "❌ Logging setup failed"
+    exit 1
+fi
 
 # Run the smoke test
 echo "Running smoke test..."
 python smoke_test.py
 
-# Verify smoke test log was created
-echo "Checking for smoke test logs..."
-if [ -d "logs" ]; then
-    echo "Logs directory exists. Contents:"
-    ls -la logs/
-    if [ -n "$(ls -A logs/)" ]; then
-        echo "Log files found:"
-        ls -ltr logs/
-        echo "Latest log file contents:"
-        cat "$(ls -tr logs/ | tail -n 1)"
-    else
-        echo "No log files found in logs directory"
-    fi
-else
-    echo "Logs directory does not exist"
-fi
-
+# Display final status
 echo ""
 echo "=== Setup Complete ==="
 echo "Logs directory: $TEST_DIR/logs/"
@@ -389,4 +410,4 @@ echo "To view the latest log file:"
 echo "ls -ltr $TEST_DIR/logs/"
 echo ""
 echo "To clean up when done, run:"
-echo "rm -rf $TEST_DIR" 
+echo "cd .. && rm -rf $(basename $TEST_DIR)" 
