@@ -97,12 +97,25 @@ set REPO_DIR="$HOME/CodeProjects/smoke_test"
 # Check if repository already exists
 if (-d "$REPO_DIR") then
     echo "Repository already exists at $REPO_DIR" |& tee -a "$LOG_FILE"
-    echo "Pulling latest changes..." |& tee -a "$LOG_FILE"
     cd "$REPO_DIR"
-    git pull |& tee -a "$LOG_FILE"
-    if ($status != 0) then
-        echo "❌ Failed to pull latest changes" |& tee -a "$LOG_FILE"
-        exit 1
+    # Check if it's a git repository
+    if (-d .git) then
+        echo "Pulling latest changes..." |& tee -a "$LOG_FILE"
+        git pull |& tee -a "$LOG_FILE"
+        if ($status != 0) then
+            echo "❌ Failed to pull latest changes" |& tee -a "$LOG_FILE"
+            exit 1
+        endif
+    else
+        echo "Directory exists but is not a git repository. Re-cloning..." |& tee -a "$LOG_FILE"
+        cd ..
+        rm -rf "$REPO_DIR"
+        git clone "$REPO_URL" "$REPO_DIR" |& tee -a "$LOG_FILE"
+        if ($status != 0) then
+            echo "❌ Failed to clone repository" |& tee -a "$LOG_FILE"
+            exit 1
+        endif
+        cd "$REPO_DIR"
     endif
 else
     echo "Cloning repository from $REPO_URL..." |& tee -a "$LOG_FILE"
