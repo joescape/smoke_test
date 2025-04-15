@@ -15,6 +15,11 @@ set LOG_FILE="$LOG_DIR/setup_${TIMESTAMP}.log"
 && echo "Logging all output to: $LOG_FILE" \
 && echo "============================================") |& tee -a "$LOG_FILE"
 
+# Initialize pyenv environment variables
+setenv PYENV_ROOT "$HOME/.pyenv"
+set path = ($PYENV_ROOT/bin $path)
+eval `$PYENV_ROOT/bin/pyenv init -` >& /dev/null
+
 # Function to check build dependencies
 check_build_dependencies:
     echo "=== Checking Build Dependencies ===" |& tee -a "$LOG_FILE"
@@ -60,8 +65,10 @@ install_pyenv:
         echo 'set path = ($PYENV_ROOT/bin $path)' >> ~/.tcshrc
         echo 'eval `pyenv init -`' >> ~/.tcshrc
         
-        # Source the updated configuration
-        source ~/.tcshrc
+        # Initialize pyenv in current shell
+        setenv PYENV_ROOT "$HOME/.pyenv"
+        set path = ($PYENV_ROOT/bin $path)
+        eval `$PYENV_ROOT/bin/pyenv init -` >& /dev/null
         
         if ($status == 0) then
             echo "✅ pyenv installed and configured successfully" |& tee -a "$LOG_FILE"
@@ -76,13 +83,23 @@ install_python_311:
     echo "=== Installing Python 3.11 ===" |& tee -a "$LOG_FILE"
     set python_version="3.11.8"
     
+    # Verify pyenv is in path
+    echo -n "Verifying pyenv installation... " |& tee -a "$LOG_FILE"
+    $PYENV_ROOT/bin/pyenv --version >& /dev/null
+    if ($status == 0) then
+        echo "✅ pyenv is properly initialized" |& tee -a "$LOG_FILE"
+    else
+        echo "❌ pyenv is not properly initialized" |& tee -a "$LOG_FILE"
+        exit 1
+    endif
+    
     # Check if Python 3.11 is already installed
-    pyenv versions | grep "3.11" >& /dev/null
+    $PYENV_ROOT/bin/pyenv versions | grep "3.11" >& /dev/null
     if ($status == 0) then
         echo "✅ Python 3.11 is already installed" |& tee -a "$LOG_FILE"
     else
         echo "Installing Python $python_version..." |& tee -a "$LOG_FILE"
-        pyenv install "$python_version" |& tee -a "$LOG_FILE"
+        $PYENV_ROOT/bin/pyenv install "$python_version" |& tee -a "$LOG_FILE"
         
         if ($status == 0) then
             echo "✅ Python $python_version installed successfully" |& tee -a "$LOG_FILE"
@@ -94,7 +111,7 @@ install_python_311:
     
     # Set Python as the local version
     echo "Setting Python $python_version as the local version..." |& tee -a "$LOG_FILE"
-    pyenv local "$python_version"
+    $PYENV_ROOT/bin/pyenv local "$python_version"
     
     if ($status == 0) then
         echo "✅ Set Python $python_version as the local version" |& tee -a "$LOG_FILE"
