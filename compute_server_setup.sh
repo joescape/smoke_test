@@ -3,47 +3,90 @@
 # Function to check build dependencies
 check_build_dependencies() {
     echo "=== Checking Build Dependencies ==="
-    local required_packages=(
+    
+    # Check for basic tools in PATH
+    local required_tools=(
+        "git"
+        "curl"
         "gcc"
         "make"
-        "build-essential"
-        "libssl-dev"
-        "zlib1g-dev"
-        "libbz2-dev"
-        "libreadline-dev"
-        "libsqlite3-dev"
-        "wget"
-        "curl"
-        "llvm"
-        "libncurses5-dev"
-        "libncursesw5-dev"
-        "xz-utils"
-        "tk-dev"
-        "libffi-dev"
-        "liblzma-dev"
-        "python3-openssl"
     )
     
-    local missing_packages=()
+    local missing_tools=()
     
-    for package in "${required_packages[@]}"; do
-        echo -n "Checking $package... "
-        if ! dpkg -l | grep -q "^ii  $package "; then
+    for tool in "${required_tools[@]}"; do
+        echo -n "Checking $tool... "
+        if ! command -v "$tool" >/dev/null 2>&1; then
             echo "❌ Not found"
-            missing_packages+=("$package")
+            missing_tools+=("$tool")
         else
             echo "✅ Found"
         fi
     done
     
-    if [ ${#missing_packages[@]} -ne 0 ]; then
-        echo "❌ Missing build dependencies: ${missing_packages[*]}"
-        echo "⚠️  Note: Some dependencies might be available under different names on RHEL7"
-        echo "⚠️  You may need to install these dependencies using yum"
+    if [ ${#missing_tools[@]} -ne 0 ]; then
+        echo "❌ Missing required tools: ${missing_tools[*]}"
+        echo "⚠️  These tools need to be available in your PATH"
         return 1
     fi
     
-    echo "✅ All build dependencies are installed"
+    # Check for write permissions in home directory
+    echo -n "Checking home directory permissions... "
+    if [ ! -w "$HOME" ]; then
+        echo "❌ No write permission in home directory"
+        return 1
+    else
+        echo "✅ Write permission available"
+    fi
+    
+    echo "✅ All build requirements met"
+    return 0
+}
+
+# Function to detect shell type
+detect_shell() {
+    if [ -n "$BASH_VERSION" ]; then
+        echo "bash"
+    elif [ -n "$ZSH_VERSION" ]; then
+        echo "zsh"
+    elif [ -n "$version" ]; then  # tcsh sets this variable
+        echo "csh"
+    else
+        echo "unknown"
+    fi
+}
+
+# Function to configure pyenv for the current shell
+configure_pyenv() {
+    local shell_type=$(detect_shell)
+    local config_file
+    
+    case "$shell_type" in
+        "bash")
+            config_file="$HOME/.bashrc"
+            echo 'export PYENV_ROOT="$HOME/.pyenv"' >> "$config_file"
+            echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> "$config_file"
+            echo 'eval "$(pyenv init -)"' >> "$config_file"
+            ;;
+        "zsh")
+            config_file="$HOME/.zshrc"
+            echo 'export PYENV_ROOT="$HOME/.pyenv"' >> "$config_file"
+            echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> "$config_file"
+            echo 'eval "$(pyenv init -)"' >> "$config_file"
+            ;;
+        "csh")
+            config_file="$HOME/.cshrc"
+            echo 'setenv PYENV_ROOT "$HOME/.pyenv"' >> "$config_file"
+            echo 'set path = ($PYENV_ROOT/bin $path)' >> "$config_file"
+            echo 'eval "`pyenv init -`"' >> "$config_file"
+            ;;
+        *)
+            echo "❌ Unsupported shell type: $shell_type"
+            return 1
+            ;;
+    esac
+    
+    echo "✅ pyenv configured for $shell_type in $config_file"
     return 0
 }
 
@@ -70,22 +113,24 @@ install_pyenv() {
         return 1
     fi
     
-    # Add pyenv to PATH
-    echo "Configuring pyenv in .bashrc..."
-    {
-        echo 'export PYENV_ROOT="$HOME/.pyenv"'
-        echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"'
-        echo 'eval "$(pyenv init -)"'
-    } >> ~/.bashrc
-    
-    # Source the updated .bashrc
-    echo "Sourcing updated .bashrc..."
-    if ! source ~/.bashrc; then
-        echo "❌ Failed to source .bashrc"
+    # Configure pyenv for the current shell
+    if ! configure_pyenv; then
+        echo "❌ Failed to configure pyenv"
         return 1
     fi
     
-    echo "✅ pyenv installed successfully"
+    # Source the updated configuration
+    echo "Sourcing updated configuration..."
+    case "$(detect_shell)" in
+        "bash"|"zsh")
+            source ~/.bashrc 2>/dev/null || source ~/.zshrc 2>/dev/null
+            ;;
+        "csh")
+            source ~/.cshrc 2>/dev/null
+            ;;
+    esac
+    
+    echo "✅ pyenv installed and configured successfully"
     return 0
 }
 
@@ -93,33 +138,34 @@ install_pyenv() {
 install_python_311() {
     echo "=== Installing Python 3.11 ==="
     local python_install_log="$TEST_DIR/python_install.log"
+    local python_version="3.11.8"  # Latest stable 3.11.x version
     
     # Check if Python 3.11 is already installed
     if pyenv versions | grep -q "3.11"; then
         echo "✅ Python 3.11 is already installed"
     else
-        echo "Installing Python 3.11..."
+        echo "Installing Python $python_version..."
         echo "Logging installation to $python_install_log"
         
-        # Install Python 3.11 with detailed logging
-        if ! pyenv install 3.11.0 > "$python_install_log" 2>&1; then
-            echo "❌ Failed to install Python 3.11"
+        # Install Python with detailed logging
+        if ! pyenv install "$python_version" > "$python_install_log" 2>&1; then
+            echo "❌ Failed to install Python $python_version"
             echo "Installation log:"
             cat "$python_install_log"
             return 1
         fi
         
-        echo "✅ Python 3.11 installed successfully"
+        echo "✅ Python $python_version installed successfully"
     fi
     
-    # Set Python 3.11 as the local version
-    echo "Setting Python 3.11 as the local version..."
-    if ! pyenv local 3.11.0; then
-        echo "❌ Failed to set Python 3.11 as local version"
+    # Set Python as the local version
+    echo "Setting Python $python_version as the local version..."
+    if ! pyenv local "$python_version"; then
+        echo "❌ Failed to set Python $python_version as local version"
         return 1
     fi
     
-    echo "✅ Set Python 3.11 as the local version"
+    echo "✅ Set Python $python_version as the local version"
     return 0
 }
 
@@ -148,27 +194,39 @@ cleanup_failed_install() {
     echo "✅ Cleanup complete"
 }
 
-# Main setup function
+# Function to set up Python environment
 setup_python_environment() {
-    echo "=== Starting Python Environment Setup ==="
-    
-    # Check build dependencies
-    if ! check_build_dependencies; then
-        echo "❌ Missing build dependencies. Setup cannot continue."
-        return 1
-    fi
+    echo "=== Setting up Python Environment ==="
     
     # Install pyenv
     if ! install_pyenv; then
         echo "❌ pyenv installation failed"
-        cleanup_failed_install
         return 1
     fi
     
     # Install Python 3.11
     if ! install_python_311; then
         echo "❌ Python 3.11 installation failed"
-        cleanup_failed_install
+        return 1
+    fi
+    
+    # Create and activate virtual environment
+    echo "Creating virtual environment..."
+    python -m venv venv
+    source venv/bin/activate
+    
+    # Upgrade pip
+    echo "Upgrading pip..."
+    pip install --upgrade pip
+    
+    # Install dependencies
+    echo "Installing project dependencies..."
+    pip install -r requirements.txt
+    
+    # Verify installations
+    echo "Verifying installations..."
+    if ! python -c "import dotenv, structlog, git" 2>/dev/null; then
+        echo "❌ Failed to install required packages"
         return 1
     fi
     
@@ -243,31 +301,14 @@ check_pip() {
     fi
 }
 
-echo "=== Setting up Python Environment ==="
-if ! setup_python_environment; then
-    echo "❌ Python environment setup failed"
-    exit 1
-fi
-
-echo "=== Checking Required Tools ==="
-check_python_versions
-check_tool "git" "--version"
-check_python
-check_pip
-
-echo ""
-echo "=== System Information ==="
-echo "Operating System: $(uname -a)"
-echo "Available Memory: $(free -h | awk '/^Mem:/ {print $2}')"
-echo "Disk Space: $(df -h . | awk 'NR==2 {print $4}') available"
+# Main script execution
+echo "=== Setting up smoke test environment ==="
 
 # Create a temporary directory for the test in user's home directory
 TEST_DIR="$HOME/smoke_test_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$TEST_DIR"
 cd "$TEST_DIR"
 
-echo ""
-echo "=== Setting up smoke test environment ==="
 echo "Test directory: $TEST_DIR"
 
 # Clone the repository from GitHub
@@ -287,86 +328,16 @@ if [ ! -f "smoke_test.py" ] || [ ! -f "logging_config.py" ]; then
 fi
 echo "✅ Repository verification successful"
 
-# Make scripts executable
-echo "Setting up scripts..."
-chmod +x setup_git.sh test_github_integration.sh
-echo "✅ Scripts made executable"
-
-# Set up Python environment in user space
-echo "Setting up Python environment..."
-# Try to use the highest available Python 3 version
-PYTHON_CMD="python3"
-for version in {12,11,10,9,8,7,6,5,4,3}; do
-    if command -v "python3.${version}" >/dev/null 2>&1; then
-        PYTHON_CMD="python3.${version}"
-        echo "Using $PYTHON_CMD for virtual environment"
-        break
-    fi
-done
-
-$PYTHON_CMD -m venv venv --without-pip
-source venv/bin/activate
-
-# Install pip in user space
-echo "Installing pip in user space..."
-curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
-python get-pip.py --user
-export PATH=$HOME/.local/bin:$PATH
-
-# Upgrade pip and install dependencies in user space
-echo "Upgrading pip and installing dependencies..."
-pip install --user --upgrade pip
-pip install --user "python-dotenv>=0.19.0,<1.0.0" "structlog>=20.1.0,<21.0.0"
+# Set up Python environment
+if ! setup_python_environment; then
+    echo "❌ Python environment setup failed"
+    exit 1
+fi
 
 # Create logs directory with user permissions
 echo "Creating logs directory..."
 mkdir -p logs
 chmod 700 logs  # User-only permissions
-
-# Test logging functionality
-echo "Testing logging functionality..."
-cat > test_logging.py << EOL
-import logging
-import os
-import sys
-from datetime import datetime
-
-# Create logs directory if it doesn't exist
-os.makedirs('logs', exist_ok=True)
-
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('logs/test_log.log'),
-        logging.StreamHandler()
-    ]
-)
-
-# Test logging
-logging.info("This is a test log message")
-logging.info(f"Python version: {sys.version}")
-logging.info(f"Python executable: {sys.executable}")
-print("Test log message written. Check logs/test_log.log")
-EOL
-
-# Run the test logging script
-echo "Running logging test..."
-python test_logging.py
-
-# Verify log file was created
-if [ -f "logs/test_log.log" ]; then
-    echo "✅ Log file created successfully"
-    echo "Log file contents:"
-    cat logs/test_log.log
-else
-    echo "❌ Log file was not created"
-    echo "Current directory contents:"
-    ls -la
-    echo "Logs directory contents:"
-    ls -la logs/
-fi
 
 # Run the smoke test
 echo "Running smoke test..."
@@ -389,8 +360,6 @@ else
     echo "Logs directory does not exist"
 fi
 
-# The script will stay in the test directory
-# You can examine the logs in the logs/ directory
 echo ""
 echo "=== Setup Complete ==="
 echo "Logs directory: $TEST_DIR/logs/"
