@@ -81,8 +81,9 @@ $MINICONDA_DIR/bin/conda create -y -n smoke_test python=$python_version |& tee -
 
 if ($status == 0) then
     echo "✅ Python environment created successfully" |& tee -a "$LOG_FILE"
-    # Activate the environment
+    # Activate the environment and set _CONDA_ROOT
     source $MINICONDA_DIR/bin/activate smoke_test
+    setenv _CONDA_ROOT "$MINICONDA_DIR"
     setenv PYTHON_CMD "$MINICONDA_DIR/envs/smoke_test/bin/python"
 else
     echo "❌ Failed to create Python environment" |& tee -a "$LOG_FILE"
