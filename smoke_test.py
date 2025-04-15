@@ -2,8 +2,17 @@ import os
 import platform
 import sys
 import subprocess
-import git
+import shutil
 from logging_config import logger
+
+def check_python_environment():
+    """Check Python environment details"""
+    logger.info("Checking Python environment",
+                python_executable=sys.executable,
+                python_path=sys.path,
+                virtual_env=os.environ.get('VIRTUAL_ENV', 'Not in virtual environment'),
+                pyenv_version=os.environ.get('PYENV_VERSION', 'Not using pyenv'),
+                pip_version=subprocess.check_output([sys.executable, '-m', 'pip', '--version'], text=True).strip())
 
 def check_system_info():
     """Check and log system information"""
@@ -13,7 +22,9 @@ def check_system_info():
                 version=platform.version(),
                 machine=platform.machine(),
                 processor=platform.processor(),
-                python_version=sys.version)
+                python_version=sys.version,
+                python_implementation=platform.python_implementation(),
+                python_compiler=platform.python_compiler())
 
 def check_wsl_specific():
     """Check WSL-specific information"""
@@ -25,22 +36,54 @@ def check_wsl_specific():
 
 def check_environment():
     """Check environment variables and paths"""
+    # Get pyenv root if it exists
+    pyenv_root = os.environ.get('PYENV_ROOT', 'Not set')
+    if pyenv_root != 'Not set':
+        pyenv_versions = os.listdir(os.path.join(pyenv_root, 'versions')) if os.path.exists(os.path.join(pyenv_root, 'versions')) else []
+    
     logger.info("Environment check",
                 current_directory=os.getcwd(),
                 path=os.environ.get('PATH', ''),
                 home=os.environ.get('HOME', ''),
-                user=os.environ.get('USER', ''))
+                user=os.environ.get('USER', ''),
+                pyenv_root=pyenv_root,
+                pyenv_versions=pyenv_versions if 'pyenv_versions' in locals() else 'Not available',
+                shell=os.environ.get('SHELL', ''))
 
 def check_file_system():
     """Check file system operations"""
     test_file = "test_write.txt"
+    test_dir = "test_dir"
+    
     try:
+        # Test file write
         with open(test_file, 'w') as f:
             f.write("Test write operation")
+        logger.info("File write test successful")
+        
+        # Test directory operations
+        os.makedirs(test_dir, exist_ok=True)
+        logger.info("Directory creation test successful")
+        
+        # Test file permissions
+        file_stat = os.stat(test_file)
+        logger.info("File permissions check",
+                   mode=file_stat.st_mode,
+                   uid=file_stat.st_uid,
+                   gid=file_stat.st_gid)
+        
+        # Clean up
         os.remove(test_file)
-        logger.info("File system check successful")
+        shutil.rmtree(test_dir)
+        logger.info("File system cleanup successful")
+        
     except Exception as e:
         logger.error("File system check failed", error=str(e))
+        # Clean up if possible
+        if os.path.exists(test_file):
+            os.remove(test_file)
+        if os.path.exists(test_dir):
+            shutil.rmtree(test_dir)
 
 def check_git_config():
     """Check Git configuration"""
@@ -68,38 +111,43 @@ def check_git_config():
 
 def test_github_clone():
     """Test cloning a repository from GitHub"""
-    test_repo = "https://github.com/github/gitignore.git"  # Using a small, public repo for testing
-    clone_dir = "test_clone"
-    
     try:
-        # Remove test directory if it exists
-        if os.path.exists(clone_dir):
-            subprocess.run(['rm', '-rf', clone_dir], check=True)
+        import git
+        test_repo = "https://github.com/github/gitignore.git"  # Using a small, public repo for testing
+        clone_dir = "test_clone"
+        
+        try:
+            # Remove test directory if it exists
+            if os.path.exists(clone_dir):
+                subprocess.run(['rm', '-rf', clone_dir], check=True)
+                
+            # Clone the repository
+            logger.info("Attempting to clone test repository", repo=test_repo)
+            git.Repo.clone_from(test_repo, clone_dir)
             
-        # Clone the repository
-        logger.info("Attempting to clone test repository", repo=test_repo)
-        git.Repo.clone_from(test_repo, clone_dir)
-        
-        # Verify the clone
-        repo = git.Repo(clone_dir)
-        logger.info("Repository clone successful",
-                   branch=repo.active_branch.name,
-                   commit_count=len(list(repo.iter_commits())))
-        
-        # Clean up
-        subprocess.run(['rm', '-rf', clone_dir], check=True)
-        logger.info("Test repository cleanup successful")
-        
-    except Exception as e:
-        logger.error("GitHub clone test failed", error=str(e))
-        # Clean up in case of partial clone
-        if os.path.exists(clone_dir):
+            # Verify the clone
+            repo = git.Repo(clone_dir)
+            logger.info("Repository clone successful",
+                       branch=repo.active_branch.name,
+                       commit_count=len(list(repo.iter_commits())))
+            
+            # Clean up
             subprocess.run(['rm', '-rf', clone_dir], check=True)
+            logger.info("Test repository cleanup successful")
+            
+        except Exception as e:
+            logger.error("GitHub clone test failed", error=str(e))
+            # Clean up in case of partial clone
+            if os.path.exists(clone_dir):
+                subprocess.run(['rm', '-rf', clone_dir], check=True)
+    except ImportError:
+        logger.warning("GitPython not available, skipping GitHub clone test")
 
 def main():
     logger.info("Starting smoke test")
     
     try:
+        check_python_environment()
         check_system_info()
         check_wsl_specific()
         check_environment()
