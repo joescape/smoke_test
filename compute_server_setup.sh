@@ -92,7 +92,7 @@ endif
 # Clone the GitHub repository
 echo "=== Cloning GitHub Repository ===" |& tee -a "$LOG_FILE"
 set REPO_URL="https://github.com/joescape/smoke_test.git"
-set REPO_DIR="$HOME/smoke_test"
+set REPO_DIR="$HOME/CodeProjects/smoke_test"
 
 # Check if repository already exists
 if (-d "$REPO_DIR") then
