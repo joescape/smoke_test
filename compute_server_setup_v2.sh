@@ -41,7 +41,7 @@ endif
 
 echo "✅ All build requirements met" |& tee -a "$LOG_FILE"
 
-# Install pyenv
+# Install pyenv using pyenv-installer
 echo "=== Installing pyenv ===" |& tee -a "$LOG_FILE"
 set PYENV_DIR="$HOME/.pyenv"
 set python_version="3.11.8"
@@ -50,8 +50,8 @@ set python_version="3.11.8"
 if (-d "$PYENV_DIR") then
     echo "✅ pyenv is already installed at $PYENV_DIR" |& tee -a "$LOG_FILE"
 else
-    echo "Installing pyenv..." |& tee -a "$LOG_FILE"
-    git clone https://github.com/pyenv/pyenv.git "$PYENV_DIR" |& tee -a "$LOG_FILE"
+    echo "Installing pyenv using pyenv-installer..." |& tee -a "$LOG_FILE"
+    curl https://pyenv.run | bash |& tee -a "$LOG_FILE"
     
     if ($status == 0) then
         echo "✅ pyenv installed successfully" |& tee -a "$LOG_FILE"
@@ -66,30 +66,24 @@ else
     endif
 endif
 
-# Install Python build dependencies
-echo "=== Installing Python Build Dependencies ===" |& tee -a "$LOG_FILE"
-foreach pkg (gcc make zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel)
-    echo -n "Checking $pkg... " |& tee -a "$LOG_FILE"
-    if (`rpm -q $pkg >& /dev/null`) then
-        echo "✅ Found" |& tee -a "$LOG_FILE"
+# Install Python using pre-built version
+echo "=== Installing Python $python_version ===" |& tee -a "$LOG_FILE"
+pyenv install --list | grep "  $python_version" |& tee -a "$LOG_FILE"
+if ($status == 0) then
+    echo "Downloading pre-built Python $python_version..." |& tee -a "$LOG_FILE"
+    pyenv install $python_version |& tee -a "$LOG_FILE"
+    
+    if ($status == 0) then
+        echo "✅ Python $python_version installed successfully" |& tee -a "$LOG_FILE"
+        # Set global Python version
+        pyenv global $python_version
+        setenv PYTHON_CMD "$PYENV_DIR/shims/python"
     else
-        echo "❌ Not found" |& tee -a "$LOG_FILE"
-        echo "Please install $pkg using: sudo yum install $pkg" |& tee -a "$LOG_FILE"
+        echo "❌ Failed to install Python $python_version" |& tee -a "$LOG_FILE"
         exit 1
     endif
-end
-
-# Install Python
-echo "=== Installing Python $python_version ===" |& tee -a "$LOG_FILE"
-pyenv install $python_version |& tee -a "$LOG_FILE"
-
-if ($status == 0) then
-    echo "✅ Python $python_version installed successfully" |& tee -a "$LOG_FILE"
-    # Set global Python version
-    pyenv global $python_version
-    setenv PYTHON_CMD "$PYENV_DIR/shims/python"
 else
-    echo "❌ Failed to install Python $python_version" |& tee -a "$LOG_FILE"
+    echo "❌ Python version $python_version not available as pre-built" |& tee -a "$LOG_FILE"
     exit 1
 endif
 
