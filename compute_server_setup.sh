@@ -81,10 +81,28 @@ $MINICONDA_DIR/bin/conda create -y -n smoke_test python=$python_version |& tee -
 
 if ($status == 0) then
     echo "✅ Python environment created successfully" |& tee -a "$LOG_FILE"
-    # Activate the environment and set _CONDA_ROOT
+    # Activate the environment
     source $MINICONDA_DIR/bin/activate smoke_test
-    setenv _CONDA_ROOT "$MINICONDA_DIR"
     setenv PYTHON_CMD "$MINICONDA_DIR/envs/smoke_test/bin/python"
+    
+    # Check versions of installed tools
+    echo "=== Checking Tool Versions ===" |& tee -a "$LOG_FILE"
+    echo "Python version:" |& tee -a "$LOG_FILE"
+    $PYTHON_CMD --version |& tee -a "$LOG_FILE"
+    
+    echo "pip version:" |& tee -a "$LOG_FILE"
+    $PYTHON_CMD -m pip --version |& tee -a "$LOG_FILE"
+    
+    echo "conda version:" |& tee -a "$LOG_FILE"
+    $MINICONDA_DIR/bin/conda --version |& tee -a "$LOG_FILE"
+    
+    echo "git version:" |& tee -a "$LOG_FILE"
+    git --version |& tee -a "$LOG_FILE"
+    
+    echo "curl version:" |& tee -a "$LOG_FILE"
+    curl --version | head -n 1 |& tee -a "$LOG_FILE"
+    
+    echo "✅ Version checks complete" |& tee -a "$LOG_FILE"
 else
     echo "❌ Failed to create Python environment" |& tee -a "$LOG_FILE"
     exit 1
@@ -93,30 +111,17 @@ endif
 # Clone the GitHub repository
 echo "=== Cloning GitHub Repository ===" |& tee -a "$LOG_FILE"
 set REPO_URL="https://github.com/joescape/smoke_test.git"
-set REPO_DIR="$HOME/CodeProjects/smoke_test"
+set REPO_DIR="$HOME/smoke_test"
 
 # Check if repository already exists
 if (-d "$REPO_DIR") then
     echo "Repository already exists at $REPO_DIR" |& tee -a "$LOG_FILE"
+    echo "Pulling latest changes..." |& tee -a "$LOG_FILE"
     cd "$REPO_DIR"
-    # Check if it's a git repository
-    if (-d .git) then
-        echo "Pulling latest changes..." |& tee -a "$LOG_FILE"
-        git pull |& tee -a "$LOG_FILE"
-        if ($status != 0) then
-            echo "❌ Failed to pull latest changes" |& tee -a "$LOG_FILE"
-            exit 1
-        endif
-    else
-        echo "Directory exists but is not a git repository. Re-cloning..." |& tee -a "$LOG_FILE"
-        cd ..
-        rm -rf "$REPO_DIR"
-        git clone "$REPO_URL" "$REPO_DIR" |& tee -a "$LOG_FILE"
-        if ($status != 0) then
-            echo "❌ Failed to clone repository" |& tee -a "$LOG_FILE"
-            exit 1
-        endif
-        cd "$REPO_DIR"
+    git pull |& tee -a "$LOG_FILE"
+    if ($status != 0) then
+        echo "❌ Failed to pull latest changes" |& tee -a "$LOG_FILE"
+        exit 1
     endif
 else
     echo "Cloning repository from $REPO_URL..." |& tee -a "$LOG_FILE"
@@ -133,9 +138,17 @@ echo "✅ Repository setup complete" |& tee -a "$LOG_FILE"
 # Set up Python environment
 echo "=== Setting up Python Environment ===" |& tee -a "$LOG_FILE"
 
-# Upgrade pip
-echo "Upgrading pip..." |& tee -a "$LOG_FILE"
-$PYTHON_CMD -m pip install --upgrade pip |& tee -a "$LOG_FILE"
+# Check pip version and upgrade if needed
+echo "Checking pip version..." |& tee -a "$LOG_FILE"
+set PIP_VERSION=`$PYTHON_CMD -m pip --version | awk '{print $2}' | cut -d. -f1-2`
+set MIN_PIP_VERSION="23.0"  # Minimum acceptable pip version
+
+if (`echo "$PIP_VERSION < $MIN_PIP_VERSION" | bc -l`) then
+    echo "Upgrading pip (current version: $PIP_VERSION)..." |& tee -a "$LOG_FILE"
+    $PYTHON_CMD -m pip install --upgrade pip |& tee -a "$LOG_FILE"
+else
+    echo "✅ pip version $PIP_VERSION is recent enough, skipping upgrade" |& tee -a "$LOG_FILE"
+endif
 
 # Install build dependencies
 echo "Installing build dependencies..." |& tee -a "$LOG_FILE"

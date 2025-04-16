@@ -171,6 +171,51 @@ else
     exit 1
 endif
 
+# Verify installed versions
+echo "=== Verifying Installed Versions ===" |& tee -a "$LOG_FILE"
+
+# Check Python version
+echo -n "Checking Python version... " |& tee -a "$LOG_FILE"
+$PYTHON_CMD --version |& tee -a "$LOG_FILE"
+if ($status != 0) then
+    echo "❌ Failed to get Python version" |& tee -a "$LOG_FILE"
+    exit 1
+endif
+
+# Check pip version
+echo -n "Checking pip version... " |& tee -a "$LOG_FILE"
+$PYTHON_CMD -m pip --version |& tee -a "$LOG_FILE"
+if ($status != 0) then
+    echo "❌ Failed to get pip version" |& tee -a "$LOG_FILE"
+    exit 1
+endif
+
+# Check pyenv version
+echo -n "Checking pyenv version... " |& tee -a "$LOG_FILE"
+pyenv --version |& tee -a "$LOG_FILE"
+if ($status != 0) then
+    echo "❌ Failed to get pyenv version" |& tee -a "$LOG_FILE"
+    exit 1
+endif
+
+# Check git version
+echo -n "Checking git version... " |& tee -a "$LOG_FILE"
+git --version |& tee -a "$LOG_FILE"
+if ($status != 0) then
+    echo "❌ Failed to get git version" |& tee -a "$LOG_FILE"
+    exit 1
+endif
+
+# Check curl version
+echo -n "Checking curl version... " |& tee -a "$LOG_FILE"
+curl --version |& tee -a "$LOG_FILE"
+if ($status != 0) then
+    echo "❌ Failed to get curl version" |& tee -a "$LOG_FILE"
+    exit 1
+endif
+
+echo "✅ All version checks completed successfully" |& tee -a "$LOG_FILE"
+
 # Display final status
 echo "" |& tee -a "$LOG_FILE"
 echo "=== Setup Complete ===" |& tee -a "$LOG_FILE"
