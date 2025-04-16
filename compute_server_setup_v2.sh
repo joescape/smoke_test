@@ -51,17 +51,29 @@ if (-d "$PYENV_DIR") then
     echo "✅ pyenv is already installed at $PYENV_DIR" |& tee -a "$LOG_FILE"
 else
     echo "Installing pyenv using pyenv-installer..." |& tee -a "$LOG_FILE"
-    curl https://pyenv.run | bash |& tee -a "$LOG_FILE"
-    
+    # Download the installer script
+    curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer -o pyenv-installer.sh |& tee -a "$LOG_FILE"
     if ($status == 0) then
-        echo "✅ pyenv installed successfully" |& tee -a "$LOG_FILE"
-        # Add pyenv to PATH
-        setenv PATH "$PYENV_DIR/bin:$PATH"
-        # Add to .tcshrc for future sessions
-        echo 'setenv PATH "'$PYENV_DIR'/bin:$PATH"' >> ~/.tcshrc
-        echo 'eval "`pyenv init -`"' >> ~/.tcshrc
+        # Make it executable and run it
+        chmod +x pyenv-installer.sh
+        tcsh ./pyenv-installer.sh |& tee -a "$LOG_FILE"
+        rm -f pyenv-installer.sh
+        
+        if ($status == 0) then
+            echo "✅ pyenv installed successfully" |& tee -a "$LOG_FILE"
+            # Add pyenv to PATH
+            setenv PATH "$PYENV_DIR/bin:$PATH"
+            # Initialize pyenv
+            eval `$PYENV_DIR/bin/pyenv init -`
+            # Add to .tcshrc for future sessions
+            echo 'setenv PATH "'$PYENV_DIR'/bin:$PATH"' >> ~/.tcshrc
+            echo 'eval "`'$PYENV_DIR'/bin/pyenv init -`"' >> ~/.tcshrc
+        else
+            echo "❌ Failed to install pyenv" |& tee -a "$LOG_FILE"
+            exit 1
+        endif
     else
-        echo "❌ Failed to install pyenv" |& tee -a "$LOG_FILE"
+        echo "❌ Failed to download pyenv installer" |& tee -a "$LOG_FILE"
         exit 1
     endif
 endif
