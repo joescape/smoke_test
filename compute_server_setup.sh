@@ -1,5 +1,13 @@
 #!/bin/tcsh
 
+# Check if repository URL is provided as an argument
+if ($#argv >= 1) then
+    set REPO_URL="$argv[1]"
+else
+    # Default repository URL if not provided
+    set REPO_URL="https://github.com/joescape/smoke_test.git"
+endif
+
 # Set up logging for all terminal output
 set TIMESTAMP=`date +%Y%m%d_%H%M%S`
 set SCRIPT_DIR=`dirname "$0"`
@@ -11,6 +19,7 @@ set LOG_FILE="$LOG_DIR/setup_${TIMESTAMP}.log"
 # Redirect all output to both terminal and log file
 echo "=== Smoke Test Setup Started at `date` ===" |& tee -a "$LOG_FILE"
 echo "Current directory: $SCRIPT_DIR" |& tee -a "$LOG_FILE"
+echo "Using repository URL: $REPO_URL" |& tee -a "$LOG_FILE"
 echo "Logging all output to: $LOG_FILE" |& tee -a "$LOG_FILE"
 echo "============================================" |& tee -a "$LOG_FILE"
 
@@ -110,7 +119,6 @@ endif
 
 # Clone the GitHub repository
 echo "=== Cloning GitHub Repository ===" |& tee -a "$LOG_FILE"
-set REPO_URL="https://github.com/joescape/smoke_test.git"
 set REPO_DIR="$HOME/smoke_test"
 
 # Check if repository already exists
@@ -189,5 +197,9 @@ echo "cat $LOG_FILE" |& tee -a "$LOG_FILE"
 echo "" |& tee -a "$LOG_FILE"
 echo "To clean up logs:" |& tee -a "$LOG_FILE"
 echo "rm -rf $LOG_DIR  # This will remove all logs" |& tee -a "$LOG_FILE"
+echo "" |& tee -a "$LOG_FILE"
+echo "=== Usage Instructions ===" |& tee -a "$LOG_FILE"
+echo "The setup script can be run with a custom repository URL:" |& tee -a "$LOG_FILE"
+echo "./compute_server_setup.sh https://github.com/username/repo.git" |& tee -a "$LOG_FILE"
 echo "" |& tee -a "$LOG_FILE"
 echo "=== Smoke Test Setup Completed at `date` ===" |& tee -a "$LOG_FILE" 

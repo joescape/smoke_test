@@ -1,5 +1,13 @@
 #!/bin/tcsh
 
+# Check if repository URL is provided as an argument
+if ($#argv >= 1) then
+    set REPO_URL="$argv[1]"
+else
+    # Default repository URL if not provided
+    set REPO_URL="https://github.com/joescape/smoke_test.git"
+endif
+
 # Set up logging for all terminal output
 set TIMESTAMP=`date +%Y%m%d_%H%M%S`
 set SCRIPT_DIR=`dirname "$0"`
@@ -11,6 +19,7 @@ set LOG_FILE="$LOG_DIR/setup_${TIMESTAMP}.log"
 # Redirect all output to both terminal and log file
 echo "=== Smoke Test Setup v2 (pyenv) Started at `date` ===" |& tee -a "$LOG_FILE"
 echo "Current directory: $SCRIPT_DIR" |& tee -a "$LOG_FILE"
+echo "Using repository URL: $REPO_URL" |& tee -a "$LOG_FILE"
 echo "Logging all output to: $LOG_FILE" |& tee -a "$LOG_FILE"
 echo "============================================" |& tee -a "$LOG_FILE"
 
@@ -41,108 +50,148 @@ endif
 
 echo "✅ All build requirements met" |& tee -a "$LOG_FILE"
 
-# Install pyenv using pyenv-installer
-echo "=== Installing pyenv ===" |& tee -a "$LOG_FILE"
-set PYENV_DIR="$HOME/.pyenv"
-set python_version="3.11.8"
-
-# Check if pyenv is already installed
-if (-d "$PYENV_DIR") then
-    echo "✅ pyenv is already installed at $PYENV_DIR" |& tee -a "$LOG_FILE"
-else
-    echo "Installing pyenv using pyenv-installer..." |& tee -a "$LOG_FILE"
-    # Download the installer script
-    curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer -o pyenv-installer.sh |& tee -a "$LOG_FILE"
+# Check if we can use the system Python
+echo "=== Checking for System Python ===" |& tee -a "$LOG_FILE"
+set PYTHON_INSTALLED=0
+foreach py_cmd (python3 python)
+    which $py_cmd >& /dev/null
     if ($status == 0) then
-        # Make it executable and run it
-        chmod +x pyenv-installer.sh
-        tcsh ./pyenv-installer.sh |& tee -a "$LOG_FILE"
-        rm -f pyenv-installer.sh
+        set PY_VERSION=`$py_cmd --version | awk '{print $2}' | cut -d. -f1-2`
+        echo "Found $py_cmd version $PY_VERSION" |& tee -a "$LOG_FILE"
         
-        if ($status == 0) then
-            echo "✅ pyenv installed successfully" |& tee -a "$LOG_FILE"
-            # Add pyenv to PATH
-            setenv PATH "$PYENV_DIR/bin:$PATH"
-            # Initialize pyenv
-            eval `$PYENV_DIR/bin/pyenv init -`
-            # Add to .tcshrc for future sessions
-            echo 'setenv PATH "'$PYENV_DIR'/bin:$PATH"' >> ~/.tcshrc
-            echo 'eval "`'$PYENV_DIR'/bin/pyenv init -`"' >> ~/.tcshrc
-        else
-            echo "❌ Failed to install pyenv" |& tee -a "$LOG_FILE"
-            exit 1
-        endif
-    else
-        echo "❌ Failed to download pyenv installer" |& tee -a "$LOG_FILE"
-        exit 1
-    endif
-endif
-
-# Install Python using pre-built version
-echo "=== Installing Python ===" |& tee -a "$LOG_FILE"
-
-# Define Python versions to try (in order of preference)
-set python_versions = ("3.11.8" "3.11.7" "3.11.6" "3.11.5" "3.11.4" "3.11.3" "3.11.2" "3.11.1" "3.11.0")
-
-# Check available Python versions
-echo "Checking available Python versions..." |& tee -a "$LOG_FILE"
-pyenv install --list | grep "  3.11." |& tee -a "$LOG_FILE"
-if ($status != 0) then
-    echo "❌ No Python 3.11.x versions available for download" |& tee -a "$LOG_FILE"
-    echo "Available Python versions:" |& tee -a "$LOG_FILE"
-    pyenv install --list | grep -v "-" | grep -v "dev" | grep -v "rc" | grep -v "b" | head -n 20 |& tee -a "$LOG_FILE"
-    exit 1
-endif
-
-# Try each Python version in order
-foreach version ($python_versions)
-    echo "=== Trying Python $version ===" |& tee -a "$LOG_FILE"
-    
-    # Check if already installed
-    echo -n "Checking if Python $version is already installed... " |& tee -a "$LOG_FILE"
-    pyenv versions | grep "  $version" >& /dev/null
-    if ($status == 0) then
-        echo "✅ Found" |& tee -a "$LOG_FILE"
-        set python_version = $version
-        break
-    endif
-    
-    echo "Not found" |& tee -a "$LOG_FILE"
-    echo "Checking if Python $version is available for download..." |& tee -a "$LOG_FILE"
-    pyenv install --list | grep "  $version" >& /dev/null
-    if ($status == 0) then
-        echo "Downloading and installing Python $version..." |& tee -a "$LOG_FILE"
-        pyenv install $version |& tee -a "$LOG_FILE"
+        # Check if Python version is 3.6+
+        set IS_PY3=`echo $PY_VERSION | grep "^3\." | wc -l`
+        set MINOR_VER=`echo $PY_VERSION | cut -d. -f2`
         
-        if ($status == 0) then
-            echo "✅ Python $version installed successfully" |& tee -a "$LOG_FILE"
-            set python_version = $version
+        if ($IS_PY3 > 0 && $MINOR_VER >= 6) then
+            echo "✅ Using system Python $py_cmd (version $PY_VERSION)" |& tee -a "$LOG_FILE"
+            set PYTHON_CMD=$py_cmd
+            set PYTHON_INSTALLED=1
             break
         else
-            echo "⚠️ Failed to install Python $version, trying next version..." |& tee -a "$LOG_FILE"
+            echo "⚠️ System Python version $PY_VERSION is too old (need 3.6+)" |& tee -a "$LOG_FILE"
         endif
-    else
-        echo "⚠️ Python version $version not available, trying next version..." |& tee -a "$LOG_FILE"
     endif
 end
 
-# Verify we found a working Python version
-if (! $?python_version) then
-    echo "❌ Could not find or install any of the requested Python versions" |& tee -a "$LOG_FILE"
-    echo "Available Python versions:" |& tee -a "$LOG_FILE"
-    pyenv install --list | grep -v "-" | grep -v "dev" | grep -v "rc" | grep -v "b" | head -n 20 |& tee -a "$LOG_FILE"
-    exit 1
-endif
+# If we can't use system Python, try to install with pyenv
+if ($PYTHON_INSTALLED == 0) then
+    # Install pyenv using pyenv-installer
+    echo "=== Installing pyenv ===" |& tee -a "$LOG_FILE"
+    set PYENV_DIR="$HOME/.pyenv"
+    set python_version="3.11.8"
 
-# Set global Python version
-echo "Setting Python $python_version as global version..." |& tee -a "$LOG_FILE"
-pyenv global $python_version
-setenv PYTHON_CMD "$PYENV_DIR/shims/python"
+    # Check if pyenv is already installed
+    if (-d "$PYENV_DIR") then
+        echo "✅ pyenv is already installed at $PYENV_DIR" |& tee -a "$LOG_FILE"
+    else
+        echo "Installing pyenv using pyenv-installer..." |& tee -a "$LOG_FILE"
+        # Download the installer script
+        curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer -o pyenv-installer.sh |& tee -a "$LOG_FILE"
+        if ($status == 0) then
+            # Make it executable and run it
+            chmod +x pyenv-installer.sh
+            # Run with bash to avoid tcsh issues
+            bash ./pyenv-installer.sh |& tee -a "$LOG_FILE"
+            rm -f pyenv-installer.sh
+            
+            if ($status == 0) then
+                echo "✅ pyenv installed successfully" |& tee -a "$LOG_FILE"
+            else
+                echo "❌ Failed to install pyenv" |& tee -a "$LOG_FILE"
+                exit 1
+            endif
+        else
+            echo "❌ Failed to download pyenv installer" |& tee -a "$LOG_FILE"
+            exit 1
+        endif
+    endif
+
+    # Set up pyenv paths
+    set PYENV_ROOT="$HOME/.pyenv"
+    setenv PATH "$PYENV_ROOT/bin:$PATH"
+
+    # Install Python using pre-built version if available
+    echo "=== Installing Python ===" |& tee -a "$LOG_FILE"
+
+    # Define platforms to try for prebuilt binaries
+    set PLATFORMS=("3.11.8:fedora-42" "3.11.8:fedora-39" "3.11.8:fedora" "3.11.7:fedora-42" "3.11.7:fedora-39" "3.11.7:fedora" "3.11.6:fedora-42" "3.11.6:fedora-39" "3.11.6:fedora")
+
+    set PYTHON_INSTALLED=0
+    
+    # Check if any of these versions are already installed
+    foreach version ($PLATFORMS)
+        set py_version=`echo $version | cut -d: -f1`
+        echo "Checking if Python $py_version is already installed..." |& tee -a "$LOG_FILE"
+        bash -c "$PYENV_ROOT/bin/pyenv versions | grep -w '$py_version'" >& /dev/null
+        if ($status == 0) then
+            echo "✅ Python $py_version already installed" |& tee -a "$LOG_FILE"
+            set python_version=$py_version
+            set PYTHON_INSTALLED=1
+            break
+        endif
+    end
+
+    # If not installed, try to install a prebuilt version
+    if ($PYTHON_INSTALLED == 0) then
+        echo "=== Trying to install prebuilt Python ===" |& tee -a "$LOG_FILE"
+        
+        # Try each platform
+        foreach platform ($PLATFORMS)
+            set py_version=`echo $platform | cut -d: -f1`
+            set plat=`echo $platform | cut -d: -f2`
+            
+            echo "Trying Python $py_version for $plat..." |& tee -a "$LOG_FILE"
+            
+            # Try to download and install prebuilt Python
+            PYTHON_BUILD_SKIP_MIRROR=1 bash -c "PATH=\"$PYENV_ROOT/bin:\$PATH\" PYENV_ROOT=\"$PYENV_ROOT\" $PYENV_ROOT/bin/pyenv install $py_version -v" |& tee -a "$LOG_FILE"
+            
+            if ($status == 0) then
+                echo "✅ Python $py_version installed successfully" |& tee -a "$LOG_FILE"
+                set python_version=$py_version
+                set PYTHON_INSTALLED=1
+                break
+            else
+                echo "⚠️ Failed to install Python $py_version for $plat" |& tee -a "$LOG_FILE"
+            endif
+        end
+    endif
+
+    # If no prebuilt version could be installed, fallback to system Python
+    if ($PYTHON_INSTALLED == 0) then
+        echo "⚠️ Could not install Python with pyenv, checking for system Python again..." |& tee -a "$LOG_FILE"
+        foreach py_cmd (python3 python)
+            which $py_cmd >& /dev/null
+            if ($status == 0) then
+                set PY_VERSION=`$py_cmd --version | awk '{print $2}' | cut -d. -f1-2`
+                echo "Using system $py_cmd version $PY_VERSION as fallback" |& tee -a "$LOG_FILE"
+                set PYTHON_CMD=$py_cmd
+                set PYTHON_INSTALLED=1
+                break
+            endif
+        end
+    else
+        # Set global Python version and path
+        echo "Setting Python $python_version as global version..." |& tee -a "$LOG_FILE"
+        bash -c "$PYENV_ROOT/bin/pyenv global $python_version"
+        set PYTHON_CMD="$PYENV_ROOT/shims/python"
+    endif
+    
+    # Final check
+    if ($PYTHON_INSTALLED == 0) then
+        echo "❌ No suitable Python installation found or could be installed" |& tee -a "$LOG_FILE"
+        exit 1
+    endif
+else
+    echo "Using system Python $PYTHON_CMD" |& tee -a "$LOG_FILE"
+endif
 
 # Clone the GitHub repository
 echo "=== Cloning GitHub Repository ===" |& tee -a "$LOG_FILE"
-set REPO_URL="https://github.com/joescape/smoke_test.git"
-set REPO_DIR="$HOME/CodeProjects/smoke_test"
+# Use the parent directory of the script directory to handle in-place runs
+set REPO_PARENT=`dirname "$SCRIPT_DIR"`
+set REPO_DIR="$REPO_PARENT/smoke_test"
+echo "Using repository directory: $REPO_DIR" |& tee -a "$LOG_FILE"
 
 # Check if repository already exists
 if (-d "$REPO_DIR") then
@@ -179,12 +228,66 @@ endif
 
 echo "✅ Repository setup complete" |& tee -a "$LOG_FILE"
 
+# Create and set up virtual environment
+echo "=== Creating Virtual Environment ===" |& tee -a "$LOG_FILE"
+set VENV_DIR="$REPO_DIR/.venv"
+
+# Check if virtual environment already exists
+if (-d "$VENV_DIR") then
+    echo "Virtual environment already exists at $VENV_DIR" |& tee -a "$LOG_FILE"
+else
+    echo "Creating new virtual environment..." |& tee -a "$LOG_FILE"
+    # Install virtualenv if it doesn't exist
+    $PYTHON_CMD -m pip install virtualenv >& /dev/null
+    if ($status != 0) then
+        echo "Installing virtualenv..." |& tee -a "$LOG_FILE"
+        $PYTHON_CMD -m pip install virtualenv |& tee -a "$LOG_FILE"
+        if ($status != 0) then
+            echo "❌ Failed to install virtualenv" |& tee -a "$LOG_FILE"
+            exit 1
+        endif
+    endif
+    
+    # Create the virtual environment
+    $PYTHON_CMD -m virtualenv "$VENV_DIR" |& tee -a "$LOG_FILE"
+    if ($status != 0) then
+        echo "❌ Failed to create virtual environment" |& tee -a "$LOG_FILE"
+        exit 1
+    endif
+endif
+
+# Activate the virtual environment (for tcsh)
+echo "Activating virtual environment..." |& tee -a "$LOG_FILE"
+if (-f "$VENV_DIR/bin/activate.csh") then
+    source "$VENV_DIR/bin/activate.csh" |& tee -a "$LOG_FILE"
+    # Update PYTHON_CMD to use the Python from the virtual environment
+    set PYTHON_CMD="$VENV_DIR/bin/python"
+    echo "✅ Virtual environment activated" |& tee -a "$LOG_FILE"
+else
+    echo "❌ Failed to find virtual environment activation script" |& tee -a "$LOG_FILE"
+    exit 1
+endif
+
 # Set up Python environment
 echo "=== Setting up Python Environment ===" |& tee -a "$LOG_FILE"
 
-# Upgrade pip
-echo "Upgrading pip..." |& tee -a "$LOG_FILE"
-$PYTHON_CMD -m pip install --upgrade pip |& tee -a "$LOG_FILE"
+# Check pip version and upgrade if needed
+echo "Checking pip version..." |& tee -a "$LOG_FILE"
+$PYTHON_CMD -m pip --version >& /dev/null
+if ($status != 0) then
+    echo "Installing pip..." |& tee -a "$LOG_FILE"
+    curl -L https://bootstrap.pypa.io/get-pip.py -o get-pip.py |& tee -a "$LOG_FILE"
+    if ($status == 0) then
+        $PYTHON_CMD get-pip.py |& tee -a "$LOG_FILE"
+        rm -f get-pip.py
+    else
+        echo "⚠️ Failed to download pip installer, continuing anyway" |& tee -a "$LOG_FILE"
+    endif
+else
+    # Upgrade pip
+    echo "Upgrading pip..." |& tee -a "$LOG_FILE"
+    $PYTHON_CMD -m pip install --upgrade pip |& tee -a "$LOG_FILE"
+endif
 
 # Install build dependencies
 echo "Installing build dependencies..." |& tee -a "$LOG_FILE"
@@ -230,14 +333,6 @@ if ($status != 0) then
     exit 1
 endif
 
-# Check pyenv version
-echo -n "Checking pyenv version... " |& tee -a "$LOG_FILE"
-pyenv --version |& tee -a "$LOG_FILE"
-if ($status != 0) then
-    echo "❌ Failed to get pyenv version" |& tee -a "$LOG_FILE"
-    exit 1
-endif
-
 # Check git version
 echo -n "Checking git version... " |& tee -a "$LOG_FILE"
 git --version |& tee -a "$LOG_FILE"
@@ -271,4 +366,16 @@ echo "" |& tee -a "$LOG_FILE"
 echo "To clean up logs:" |& tee -a "$LOG_FILE"
 echo "rm -rf $LOG_DIR  # This will remove all logs" |& tee -a "$LOG_FILE"
 echo "" |& tee -a "$LOG_FILE"
-echo "=== Smoke Test Setup v2 Completed at `date` ===" |& tee -a "$LOG_FILE" 
+echo "=== Virtual Environment ===" |& tee -a "$LOG_FILE"
+echo "A virtual environment has been created at: $VENV_DIR" |& tee -a "$LOG_FILE"
+echo "To activate the virtual environment in the future:" |& tee -a "$LOG_FILE"
+echo "cd $REPO_DIR" |& tee -a "$LOG_FILE"
+echo "source $VENV_DIR/bin/activate.csh  # For tcsh shell" |& tee -a "$LOG_FILE"
+echo "# OR" |& tee -a "$LOG_FILE"
+echo "source $VENV_DIR/bin/activate      # For bash shell" |& tee -a "$LOG_FILE"
+echo "" |& tee -a "$LOG_FILE"
+echo "=== Usage Instructions ===" |& tee -a "$LOG_FILE"
+echo "The setup script can be run with a custom repository URL:" |& tee -a "$LOG_FILE"
+echo "./compute_server_setup_v2.sh https://github.com/username/repo.git" |& tee -a "$LOG_FILE"
+echo "" |& tee -a "$LOG_FILE"
+echo "=== Smoke Test Setup Completed at `date` ===" |& tee -a "$LOG_FILE" 
