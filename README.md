@@ -57,20 +57,31 @@ The repository contains several utility scripts:
 - **logging_config.py**: Configures structured JSON logging for the smoke test
 - **setup_git.sh**: Sets up a Git repository with proper .gitignore for this project
 - **test_github_integration.sh**: Tests GitHub integration by cloning a repository
-- **compute_server_setup.sh**: Sets up the environment on a compute server using Miniconda
-- **compute_server_setup_v2.sh**: An improved version of compute_server_setup.sh using pyenv
+- **compute_server_setup_conda.sh**: Sets up the environment on a compute server using Miniconda
+- **compute_server_setup_pyenv.sh**: Sets up the environment on a compute server using pyenv
 
 ### Using the Compute Server Setup Scripts
 
-These scripts are designed to be run on a RHEL7 or similar environment with tcsh as the shell:
+These scripts are designed to be run on a RHEL7 or similar environment with tcsh as the shell. Choose the appropriate script based on your preferred Python environment management tool:
 
+#### Option 1: Conda-based Setup (compute_server_setup_conda.sh)
 ```bash
-# For Miniconda-based setup
-./compute_server_setup.sh
-
-# For pyenv-based setup (recommended)
-./compute_server_setup_v2.sh
+./compute_server_setup_conda.sh
 ```
+This script:
+- Uses Miniconda for Python environment management
+- Creates a conda environment named 'smoke_test'
+- Installs all required dependencies
+
+#### Option 2: pyenv-based Setup (compute_server_setup_pyenv.sh) - Recommended
+```bash
+./compute_server_setup_pyenv.sh
+```
+This script:
+- Uses pyenv for Python environment management
+- Creates a virtual environment in the project directory
+- Provides better isolation and reproducibility
+- Automatically activates the environment when you enter the project directory
 
 ## Log Files
 
