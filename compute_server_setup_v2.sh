@@ -79,25 +79,65 @@ else
 endif
 
 # Install Python using pre-built version
-echo "=== Installing Python $python_version ===" |& tee -a "$LOG_FILE"
-pyenv install --list | grep "  $python_version" |& tee -a "$LOG_FILE"
-if ($status == 0) then
-    echo "Downloading pre-built Python $python_version..." |& tee -a "$LOG_FILE"
-    pyenv install $python_version |& tee -a "$LOG_FILE"
-    
-    if ($status == 0) then
-        echo "✅ Python $python_version installed successfully" |& tee -a "$LOG_FILE"
-        # Set global Python version
-        pyenv global $python_version
-        setenv PYTHON_CMD "$PYENV_DIR/shims/python"
-    else
-        echo "❌ Failed to install Python $python_version" |& tee -a "$LOG_FILE"
-        exit 1
-    endif
-else
-    echo "❌ Python version $python_version not available as pre-built" |& tee -a "$LOG_FILE"
+echo "=== Installing Python ===" |& tee -a "$LOG_FILE"
+
+# Define Python versions to try (in order of preference)
+set python_versions = ("3.11.8" "3.11.7" "3.11.6" "3.11.5" "3.11.4" "3.11.3" "3.11.2" "3.11.1" "3.11.0")
+
+# Check available Python versions
+echo "Checking available Python versions..." |& tee -a "$LOG_FILE"
+pyenv install --list | grep "  3.11." |& tee -a "$LOG_FILE"
+if ($status != 0) then
+    echo "❌ No Python 3.11.x versions available for download" |& tee -a "$LOG_FILE"
+    echo "Available Python versions:" |& tee -a "$LOG_FILE"
+    pyenv install --list | grep -v "-" | grep -v "dev" | grep -v "rc" | grep -v "b" | head -n 20 |& tee -a "$LOG_FILE"
     exit 1
 endif
+
+# Try each Python version in order
+foreach version ($python_versions)
+    echo "=== Trying Python $version ===" |& tee -a "$LOG_FILE"
+    
+    # Check if already installed
+    echo -n "Checking if Python $version is already installed... " |& tee -a "$LOG_FILE"
+    pyenv versions | grep "  $version" >& /dev/null
+    if ($status == 0) then
+        echo "✅ Found" |& tee -a "$LOG_FILE"
+        set python_version = $version
+        break
+    endif
+    
+    echo "Not found" |& tee -a "$LOG_FILE"
+    echo "Checking if Python $version is available for download..." |& tee -a "$LOG_FILE"
+    pyenv install --list | grep "  $version" >& /dev/null
+    if ($status == 0) then
+        echo "Downloading and installing Python $version..." |& tee -a "$LOG_FILE"
+        pyenv install $version |& tee -a "$LOG_FILE"
+        
+        if ($status == 0) then
+            echo "✅ Python $version installed successfully" |& tee -a "$LOG_FILE"
+            set python_version = $version
+            break
+        else
+            echo "⚠️ Failed to install Python $version, trying next version..." |& tee -a "$LOG_FILE"
+        endif
+    else
+        echo "⚠️ Python version $version not available, trying next version..." |& tee -a "$LOG_FILE"
+    endif
+end
+
+# Verify we found a working Python version
+if (! $?python_version) then
+    echo "❌ Could not find or install any of the requested Python versions" |& tee -a "$LOG_FILE"
+    echo "Available Python versions:" |& tee -a "$LOG_FILE"
+    pyenv install --list | grep -v "-" | grep -v "dev" | grep -v "rc" | grep -v "b" | head -n 20 |& tee -a "$LOG_FILE"
+    exit 1
+endif
+
+# Set global Python version
+echo "Setting Python $python_version as global version..." |& tee -a "$LOG_FILE"
+pyenv global $python_version
+setenv PYTHON_CMD "$PYENV_DIR/shims/python"
 
 # Clone the GitHub repository
 echo "=== Cloning GitHub Repository ===" |& tee -a "$LOG_FILE"
